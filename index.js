@@ -16,7 +16,7 @@ const app = express();
 app.use(bodyParser.json());
 
 const allowedOrigins = [
-    'http://localhost:5173'
+    'https://frontend-two-rho-60.vercel.app'
 ];
 
 const corsOptions = {
@@ -269,14 +269,6 @@ app.get('/historical/:symbol', async (req, res) => {
     }
 });
 
-const testClient = new WebSocket('ws://localhost:3001');
-
-testClient.on('open', () => {
-    console.log('Test WebSocket client connected');
-    testClient.on('message', (data) => {
-        console.log('Test WebSocket client received data:', data);
-    });
-});
 
 app.post('/register', async (req, res) => {
     const { email, password } = req.body;
