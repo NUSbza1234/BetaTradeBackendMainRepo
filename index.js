@@ -16,7 +16,7 @@ const app = express();
 app.use(bodyParser.json());
 
 const allowedOrigins = [
-    'https://frontend-two-rho-60.vercel.app'
+    'http://localhost:5173'
 ];
 
 const corsOptions = {
@@ -75,6 +75,7 @@ function connectAlpacaWebSocket() {
         if (data && data.bars) {
             console.log(`Data received for symbol ${currentSymbol}:`, data.bars);
             data.bars.forEach(bar => {
+                console.log('Sending bar to clients:', bar);
                 wss.clients.forEach(client => {
                     if (client.readyState === WebSocket.OPEN) {
                         client.send(JSON.stringify(bar));
@@ -130,6 +131,7 @@ connectAlpacaWebSocket();
 
 wss.on('connection', (ws) => {
     console.log('Client connected');
+    ws.send(JSON.stringify({ message: 'Hello from server' }));
     ws.on('message', (message) => {
         console.log(`Received message => ${message}`);
     });
@@ -187,14 +189,45 @@ app.get('/portfolio/:userId', async (req, res) => {
     }
 });
 
+app.get('/transactions/:userId', async (req, res) => {
+    const { userId } = req.params;
+    console.log(`Transaction history request received for userId: ${userId}`);
+    try {
+        const transactions = await TradeModel.find({ userId });
+        res.json(transactions);
+    } catch (err) {
+        console.error('Error fetching transaction history:', err);
+        res.status(500).json(err.message);
+    }
+});
+
 app.get('/market-status', async (req, res) => {
     console.log('Market status request received');
+    const options = {
+        method: 'GET',
+        url: 'https://paper-api.alpaca.markets/v2/clock',
+        headers: {
+            'APCA-API-KEY-ID': process.env.APCA_API_KEY_ID,
+            'APCA-API-SECRET-KEY': process.env.APCA_API_SECRET_KEY,
+            'Content-Type': 'application/json'
+        }
+    };
+
     try {
-        const response = await alpaca.getClock();
-        res.json(response);
+        const response = await axios.request(options);
+        console.log('Market Clock:', response.data);
+        const is_open = response.data.is_open;
+        res.json({ is_open });
     } catch (error) {
         console.error('Error fetching market status:', error.message);
-        res.status(500).json({ error: error.message });
+        console.error('Error details:', error);
+        if (error.response) {
+            res.status(error.response.status).json({ error: error.response.data });
+        } else if (error.request) {
+            res.status(500).json({ error: 'No response received from Alpaca API' });
+        } else {
+            res.status(500).json({ error: error.message });
+        }
     }
 });
 
@@ -236,6 +269,15 @@ app.get('/historical/:symbol', async (req, res) => {
     }
 });
 
+const testClient = new WebSocket('ws://localhost:3001');
+
+testClient.on('open', () => {
+    console.log('Test WebSocket client connected');
+    testClient.on('message', (data) => {
+        console.log('Test WebSocket client received data:', data);
+    });
+});
+
 app.post('/register', async (req, res) => {
     const { email, password } = req.body;
     console.log(`Register request received for email: ${email}`);
@@ -265,21 +307,26 @@ app.post('/login', async (req, res) => {
         if (user) {
             if (user.password === password) {
                 console.log(`Login successful for email: ${email}`);
-                res.json("Success");
+                res.json({ status: "Success", user });
             } else {
                 console.log(`Wrong password for email: ${email}`);
-                res.json("Wrong password");
+                res.json({ status: "Wrong password" });
             }
         } else {
             console.log(`No records found for email: ${email}`);
-            res.json("No records found!");
+                res.json({ status: "No records found!" });
         }
     } catch (err) {
         console.error('Error during login:', err.message);
-        res.status(500).json(err.message);
+        res.status(500).json({ status: "Error", message: err.message });
     }
 });
 
-app.listen(3001, () => {
+
+app.get('/ping', (req, res) => {
+    res.send('pong');
+});
+
+server.listen(3001, () => {
     console.log("Server listening on http://127.0.0.1:3001");
 });
