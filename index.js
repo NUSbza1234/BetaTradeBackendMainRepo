@@ -141,35 +141,48 @@ wss.on('connection', (ws) => {
 });
 
 app.post('/trade', async (req, res) => {
-    const { userId, symbol, quantity, price, type } = req.body;
-    console.log(`Trade request received: userId=${userId}, symbol=${symbol}, quantity=${quantity}, price=${price}, type=${type}`);
+    const { userId, symbol, quantity, price, action } = req.body;
+
+    // Basic validation
+    if (!userId || !symbol || !quantity || !price) {
+        return res.status(400).json({ error: "Missing required fields: userId, symbol, quantity, or price" });
+    }
+
     try {
-        const trade = new TradeModel({ userId, symbol, quantity, price, type });
+        // Proceed with trade processing
+        const trade = new TradeModel({ userId, symbol, quantity, price, type: action });
         await trade.save();
+        console.log('Trade saved:', trade);
 
         let portfolio = await PortfolioModel.findOne({ userId });
         if (!portfolio) {
+            console.log('Portfolio not found, creating new portfolio for user:', userId);
             portfolio = new PortfolioModel({ userId, positions: [] });
         }
 
         const position = portfolio.positions.find(pos => pos.symbol === symbol);
         if (position) {
-            if (type === 'buy') {
+            if (action === 'Buy') {
+                const totalCost = (position.averagePrice * position.quantity) + (price * quantity);
                 position.quantity += quantity;
-                position.averagePrice = ((position.averagePrice * position.quantity) + (price * quantity)) / (position.quantity + quantity);
-            } else if (type === 'sell') {
+                position.averagePrice = totalCost / position.quantity;
+            } else if (action === 'Sell') {
                 position.quantity -= quantity;
-                if (position.quantity < 0) position.quantity = 0;
+                if (position.quantity <= 0) {
+                    portfolio.positions = portfolio.positions.filter(pos => pos.symbol !== symbol);
+                }
             }
         } else {
             portfolio.positions.push({ symbol, quantity, averagePrice: price });
         }
 
         await portfolio.save();
+        console.log('Portfolio updated:', portfolio);
+
         res.status(201).json(trade);
     } catch (err) {
         console.error('Error processing trade request:', err);
-        res.status(500).json(err.message);
+        res.status(500).json({ error: err.message });
     }
 });
 
@@ -178,9 +191,11 @@ app.get('/portfolio/:userId', async (req, res) => {
     console.log(`Portfolio request received for userId: ${userId}`);
     try {
         const portfolio = await PortfolioModel.findOne({ userId });
+        console.log('Fetched Portfolio:', portfolio);
         if (portfolio) {
             res.json(portfolio);
         } else {
+            console.log('Portfolio not found');
             res.status(404).json("Portfolio not found");
         }
     } catch (err) {
@@ -194,6 +209,7 @@ app.get('/transactions/:userId', async (req, res) => {
     console.log(`Transaction history request received for userId: ${userId}`);
     try {
         const transactions = await TradeModel.find({ userId });
+        console.log('Fetched Transactions:', transactions);
         res.json(transactions);
     } catch (err) {
         console.error('Error fetching transaction history:', err);
