@@ -142,8 +142,8 @@ wss.on('connection', (ws) => {
 
 app.post('/trade', async (req, res) => {
     const { userId, symbol, quantity, price, action } = req.body;
+    console.log('Received trade request data:', req.body);
 
-    // Basic validation
     if (!userId || !symbol || !quantity || !price) {
         return res.status(400).json({ error: "Missing required fields: userId, symbol, quantity, or price" });
     }
