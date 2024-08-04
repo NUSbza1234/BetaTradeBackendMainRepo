@@ -149,8 +149,16 @@ app.post('/trade', async (req, res) => {
     }
 
     try {
+        // Convert quantity and price to numbers to avoid string concatenation issues
+        const parsedQuantity = Number(quantity);
+        const parsedPrice = Number(price);
+
+        if (isNaN(parsedQuantity) || isNaN(parsedPrice)) {
+            return res.status(400).json({ error: "Invalid quantity or price" });
+        }
+
         // Proceed with trade processing
-        const trade = new TradeModel({ userId, symbol, quantity, price, type: action });
+        const trade = new TradeModel({ userId, symbol, quantity: parsedQuantity, price: parsedPrice, type: action });
         await trade.save();
         console.log('Trade saved:', trade);
 
@@ -163,17 +171,17 @@ app.post('/trade', async (req, res) => {
         const position = portfolio.positions.find(pos => pos.symbol === symbol);
         if (position) {
             if (action === 'Buy') {
-                const totalCost = (position.averagePrice * position.quantity) + (price * quantity);
-                position.quantity += quantity;
+                const totalCost = (position.averagePrice * position.quantity) + (parsedPrice * parsedQuantity);
+                position.quantity += parsedQuantity;
                 position.averagePrice = totalCost / position.quantity;
             } else if (action === 'Sell') {
-                position.quantity -= quantity;
+                position.quantity -= parsedQuantity;
                 if (position.quantity <= 0) {
                     portfolio.positions = portfolio.positions.filter(pos => pos.symbol !== symbol);
                 }
             }
         } else {
-            portfolio.positions.push({ symbol, quantity, averagePrice: price });
+            portfolio.positions.push({ symbol, quantity: parsedQuantity, averagePrice: parsedPrice });
         }
 
         await portfolio.save();
@@ -185,6 +193,7 @@ app.post('/trade', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
 
 app.get('/portfolio/:userId', async (req, res) => {
     const { userId } = req.params;
